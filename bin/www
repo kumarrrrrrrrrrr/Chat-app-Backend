@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+var app = require('../app');
+var debug = require('debug')('server:server');
+var http = require('http');
+const { path } = require('../app');
+
+
+/**
+ * Get port from environment and store in Express.
+ */
+
+var port = normalizePort(process.env.PORT || '5000');
+app.set('port', port);
+
+/**
+ * Create HTTP server.
+ */
+
+var server = http.createServer(app);
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+const ser = server.listen(port,()=>console.log("server run's on",port));
+const io = require('socket.io')(ser,{
+  pingTimeout:60000,
+  cors:{
+    origin:"https://sad-wozniak-0da6ab.netlify.app"
+  }
+});
+io.on("connection",(socket)=>{
+  console.log("connected to socket.io");
+  socket.on('setup',(userData)=>{
+    socket.join(userData._id);
+    socket.emit("connected");
+  });
+
+  socket.on('joinChat',(room)=>{
+  socket.join(room);
+  console.log('user Joined Room :' +room);
+    
+  });
+
+  socket.on('typing',(room)=>socket.in(room).emit('typing'));
+  socket.on('stop typing',(room)=>socket.in(room).emit('stop typing'));
+
+
+  socket.on('new message',(newMessageRecived)=>{
+    var chat = newMessageRecived.chat;
+    if(!chat.users) return console.log("chat.users not defind")
+
+    chat.users.forEach((user) => {
+      if(user._id == newMessageRecived.sender._id) return;
+
+      socket.in(user._id).emit("message recived", newMessageRecived)
+    });
+  });
+  socket.off("setup",()=>{
+    console.log("user Disconneted");
+    socket.leave(userData._id);
+  })
+});
+server.on('error', onError);
+server.on('listening', onListening);
+
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+}
